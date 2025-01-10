@@ -1,9 +1,16 @@
+const BASE_URL = "https://connect-4-quiz-backend.onrender.com"; 
+const BASE_URL = "https://your-backend-service.onrender.com"; // Replace with your backend URL
 const board = document.getElementById('board');
 const questionBox = document.getElementById('question-box');
 const questionText = document.getElementById('question');
 const answerInput = document.getElementById('answer-input');
 const submitButton = document.getElementById('submit-answer');
 const turnIndicator = document.getElementById('turn-indicator');
+const playerNamesSection = document.getElementById('player-names');
+const startGameButton = document.getElementById('start-game');
+const gameSection = document.getElementById('game');
+const player1NameInput = document.getElementById('player1-name');
+const player2NameInput = document.getElementById('player2-name');
 
 const rows = 6;
 const cols = 7;
@@ -12,14 +19,8 @@ const boardArray = Array.from({ length: rows }, () => Array(cols).fill(''));
 // Track game state
 let currentPlayer = null; // 'red' or 'yellow'
 let gameActive = true;
-
-// Questions
-const questions = [
-    { question: "What is 10 - 7?", answer: "3" },
-    { question: "Capital of France?", answer: "paris" },
-    { question: "What is 7 * 8?", answer: "56" },
-    { question: "Who wrote 'Hamlet'?", answer: "shakespeare" },
-];
+let player1Name = "Player 1";
+let player2Name = "Player 2";
 
 // Function to create the board
 function createBoard() {
@@ -35,27 +36,50 @@ function createBoard() {
     }
 }
 
-// Display question
-let currentQuestion = null;
-function displayQuestion() {
-    const randomIndex = Math.floor(Math.random() * questions.length);
-    currentQuestion = questions[randomIndex];
-    questionText.textContent = currentQuestion.question;
-    answerInput.value = '';
-    turnIndicator.textContent = "Answer the question to play!";
+// Fetch a question from the backend
+async function fetchQuestion() {
+    try {
+        const response = await fetch(`${BASE_URL}/get-question`);
+        const data = await response.json();
+        if (data.question) {
+            questionText.textContent = data.question;
+            turnIndicator.textContent = "Answer the question to play!";
+            answerInput.value = '';
+            gameActive = true;
+        } else {
+            alert("No more questions available!");
+            resetGame();
+        }
+    } catch (error) {
+        console.error("Error fetching question:", error);
+        alert("Could not fetch question. Please try again later.");
+    }
 }
 
-// Handle answer
-function handleAnswer() {
+// Submit answer to the backend
+async function submitAnswer() {
     if (!gameActive) return;
 
     const playerAnswer = answerInput.value.trim().toLowerCase();
-    if (playerAnswer === currentQuestion.answer) {
-        currentPlayer = currentPlayer || 'red'; // Set first player as red
-        turnIndicator.textContent = `${currentPlayer === 'red' ? 'Player 1' : 'Player 2'}'s Turn!`;
-        gameActive = false; // Disable further answers for this turn
-    } else {
-        alert("Wrong answer! Try again.");
+    try {
+        const response = await fetch(`${BASE_URL}/submit-answer`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ answer: playerAnswer }),
+        });
+        const data = await response.json();
+
+        if (data.correct) {
+            currentPlayer = currentPlayer || 'red'; // Set first player as red
+            const playerName = currentPlayer === 'red' ? player1Name : player2Name;
+            turnIndicator.textContent = `${playerName}'s Turn!`;
+            gameActive = false; // Allow token drop
+        } else {
+            alert("Wrong answer! Try again.");
+        }
+    } catch (error) {
+        console.error("Error submitting answer:", error);
+        alert("Could not validate your answer. Please try again later.");
     }
 }
 
@@ -69,13 +93,14 @@ function dropToken(col) {
             const cell = document.querySelector(`.cell[data-row="${r}"][data-col="${col}"]`);
             cell.classList.add(currentPlayer);
             if (checkWin(r, col)) {
-                alert(`${currentPlayer.toUpperCase()} wins!`);
+                const winnerName = currentPlayer === 'red' ? player1Name : player2Name;
+                alert(`${winnerName.toUpperCase()} wins!`);
                 resetGame();
                 return;
             }
             currentPlayer = null; // Reset currentPlayer to await next question
             gameActive = true;
-            displayQuestion();
+            fetchQuestion(); // Fetch the next question
             return;
         }
     }
@@ -117,15 +142,23 @@ function resetGame() {
     currentPlayer = null;
     gameActive = true;
     createBoard();
-    displayQuestion();
+    fetchQuestion();
 }
 
-// Initialize
-createBoard();
-displayQuestion();
+// Start the game
+function startGame() {
+    player1Name = player1NameInput.value.trim() || "Player 1";
+    player2Name = player2NameInput.value.trim() || "Player 2";
+
+    playerNamesSection.style.display = "none";
+    gameSection.style.display = "block";
+    createBoard();
+    fetchQuestion();
+}
 
 // Event listeners
-submitButton.addEventListener('click', handleAnswer);
+startGameButton.addEventListener('click', startGame);
+submitButton.addEventListener('click', submitAnswer);
 board.addEventListener('click', (e) => {
     if (!e.target.classList.contains('cell')) return;
     const col = parseInt(e.target.dataset.col);
